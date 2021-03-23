@@ -1,0 +1,388 @@
+
+<center>
+# CLUSTERING RECEIVING NFL PLAYERS
+
+![](C:/Users/marc-/Desktop/R/nfl_logo.png)
+</center>
+
+
+#### par: Marc-Olivier Gagné
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Ce projet a été réalisé dans le but de mettre en pratique mes connaissances en machine learning et  statistiques. J'avais déjà pris connaissance des différentes analyse de segmentation sur les joueurs de basketball et je voulais essayer de faire quelque chose de similaire sur les joueurs de la NFL. Puisque chaque position dans la NFL ont des objectifs différents, j'ai mis mes efforts à segmenter les joueurs qui reçoivent le ballons (receiving data) pour les postions de receiver, running back et tide end. 
+
+### Objectif
+
+Le but de ce projet est donc de découvrir parmis les données de ces joueurs si certain groupe naturels ce forme. Une analyse descriptive sera ensuite mise en oeuvre sur les segments découvert pour mieux comprendre leur caractéristique.
+
+**PS**.Ce projet ne cherche pas à expliquer la théorie et les concepts statistiques des méthodes utilisé. 
+
+### Technique utilisé
+
+Ce projet utilisera des techniques d'apprentissages non supervisé entre autre avec une analyse de segmentation (Clustering) avec la méthodes K-means et Hiérarchique.
+
+### Information sur les données 
+
+Les données ont été récupéré via le site web [Kaggle](https://www.kaggle.com/nicholascalvaresi/nfl-data). Voici la description de chaque variable du jeu de données:
+
+Glossaire des colonnes et leur signification.
+
+* Rk -- Numéro de ligne du début à la fin.
+* Age -- âge du joueur au 31 décembre de l'année.
+* Pos -- Position.
+* G -- Parti joué.
+* GS -- Parti joué comme partant.
+* Tgt -- Nombre de fois ciblé pour une passe.
+* Rec -- Nombre de réception de passe.
+* Ctch% -- Tgt / Rec. % de passe attrapé lorsque ciblé par le QB.
+* Yds -- Yards fait par le joeur pour la saison.
+* Y/R -- Yards fait par le joueur par réception.
+* TD -- Touchown fait par le joueur pour la saison.
+* X1D -- Premier essaie complété par le joueur.
+* Lng -- Plus longue réception ( en yards).
+* Y/Tgt -- Yards complété lorsque par le joueur ciblé.
+* R/G -- Nombre de réception par match (moyenne).
+* Y/G -- Nombre de yards complété par match (moyenne).
+* Fmb -- Nombre de fumble fait par le joueur mais récupéré par l'équipe.
+* Year -- Année de la saison.
+
+Pour les besoin de la causes, seul la saison 2019 sera analysé. 
+
+
+### Importation des modules nécéssaire à l'analyse
+
+```{r warning=FALSE, message=FALSE}
+library(readxl)
+library(factoextra) # Exécution de l'analyse par composante principale et la segmentation
+library(tidyverse) # Nettoyage des données
+library(ggplot2) # Présentation graphique
+library(corrplot) # Analyse des corrélations entre les variables
+library(plotly) # Réprensation graphique en 3D des cluster final.
+```
+
+```{r include=FALSE}
+# Importantion du jeux de données 
+data <- read.csv('C:/Users/marc-/Desktop/python/receiving_data.csv')
+```
+
+## Analyse exploratoire rapide 
+
+```{r}
+# Structure du jeux de données
+str(data)
+
+#Statistiques descriptives du jeux de données 
+summary(data)
+```
+
+```{r}
+# Regard rapide sur les premiers et dernières observations.
+rbind(head(data,5),tail(data,5))
+```
+
+## Takeaway
+
+Avant de poursuivre l'analyse, certains aspects du jeu de données doivent être corrigé. 
+
+1. Les variables X, Rk et Lng sont inutilent et devront être supprimé.
+
+2. La variable ctch est sous forme de facteur. Elle sera remplacé par une colonne formaté par la division de Rec sur Tgt pour avoir le même résultat.
+
+3. Certain joueur semble avoir des caractères spéciaux à côté de leur nom. Ceux-ci seront enlevé.
+
+4. La variable Y.Tgt n'est pas vraiment une bonne variable, elle sera supprimé (j'évite d'expliquer pourquoi)
+
+5. Le jeux de donnée contient actuellement les données pour les saison de 2014 à 2019. Seul 2019 sera conervé.
+
+6. Conserver uniquement les positions WR, RB, TE
+
+
+## Nettoyage des données
+
+```{r}
+# Supprime les colonne X, Rk, Y.Tgt Lng du jeu de données
+data$X <- NULL
+data$Rk <- NULL
+data$Y.Tgt <- NULL
+data$Lng<- NULL
+
+#Retire les charactère spéciaux dans le nom des joeurs
+data$Player <- str_trim(gsub("[[:punct:]]", " ", data$Player),side=c('both'))
+
+#Création d'une nouvelle colonne pct_catch qui remplace Ctch pour un format plus adapté.
+data$pct_catch <- data$Rec/data$Tgt
+data$Ctch. <- NULL
+
+#Créer le jeux de donnée netoyé avec seulement la saison 2019 et les positions WR,RB,TE
+data_clean <- data[(data$Year=='2019') & (data$Pos %in% c('WR','TE','RB')),]
+data_clean$Year <- NULL
+
+# Création d'une nouvelle variable. D1.Rec qui montre le % de premier essaie par réception.
+data_clean$XD1_Rec <- data_clean$X1D/data_clean$Rec
+
+#Vérification du jeux de données nettoyé
+head(data_clean)
+```
+
+## Visualisation rapide
+
+
+```{r}
+# Corrélation entre les variables numériques
+corrplot(cor(data_clean[,5:16]),type = 'upper',tl.col = 'black',tl.srt = 45)
+```
+
+
+
+**Relation entre les Yards par réception et les premiers essaies atteint**
+```{r}
+ggplot(data=data_clean)+
+  geom_point(aes(x=X1D,y=Y.R,colour=Pos,size=pct_catch),alpha=0.6)+
+  scale_radius()+
+  facet_wrap(~Pos,scale= 'free_x')+
+  theme_light()+
+  labs(title='Distance par réception VS premier essaie atteint',
+       y='Yards moyen par réception',
+       x='Premier essaie atteint')+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+**Remarques sur le graphique:**  
+Il est possible de voir certaines distinctions entre les 3 positions. Evidemment, les running back parcour moins de verge par réception de passe. Toutefois, leur pourcentage d'attrapé semble plus élevé que les TE ou même les receveurs. Ces derniers ont cependant plus de verge par réception étant donnée la nature de leur position.
+
+
+**% de premier essaie par réception vs % de passe attrapé**
+```{r}
+ggplot(data=data_clean)+
+  geom_boxplot(aes(x=pct_catch,y=XD1_Rec,fill=Pos))+
+  theme_light()+
+  labs(title='% de premier essaie par reception vs % de passe attrapé.',
+       x='% de passe attrapé',
+       y='% de premier essaie par réception')+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+Ce graphique précise la performance de chaque position par rapport au premier essaie atteint ainsi que leur % de passe attrapé.
+
+* Les WR complête moins souvent leurs attrapés mais lors des receptions, ils ont davantage de premier essaie que les deux autres position.Leur % moyen d'attrapé est de `r round(mean(data_clean$pct_catch[data_clean$Pos=='WR']),2)`.
+* Les TE sont relativement près des WR en terme de premier essaie complété, quoi qu'inférieur, mais semble avoir un meilleur pourcentage d'attrapé.Leur % moyen d'attrapé est de `r round(mean(data_clean$pct_catch[data_clean$Pos=='TE']),2)`.
+* Les RB sont la position qui atteint le moins le premier essaie (lors des réceptions, on n'inclue pas les courses ici) mais sont également ceux qui complête le plus les passes qui leur sont envoyé. Leur % moyen d'attrapé est de `r round(mean(data_clean$pct_catch[data_clean$Pos=='RB']),2)`.
+
+
+**Fréquence des positions visé par chaque équipe.**
+```{r}
+ggplot(data = data_clean)+
+geom_col(aes(x=Pos,y=Tgt,fill=Pos))+
+facet_wrap(~Tm)+
+theme_light()+
+  labs(title='Position le plus souvent visée par équipe',
+       y='Target',
+       x='Position')+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+Ce graphique montre le nombre de lancé dirigé par position et par équipe. On remarque que la plus part des équipes lance le plus souvent aux receveurs (évidemment). Les eagles, les ravens et les raiders semble toutefois lancé aussi souvent au TE qu'au WR. 
+
+
+
+## **ANALYSE DE REGROUPEMENT**
+
+L'analyse qui suit va tenter de trouver des groupes naturels au sein des joueurs de la NFL pour la saison 2019. Afin d'y arriver, 2 modèles seront développer:
+1. Méthodes Hiérarchique
+2. Kmeans sur données standardisé
+
+La somme des distances au carré de chaque cluster (wcss) sera la mesures de performance utilisé. Le modèles avec la plus petite valeur sera donc le meilleur.
+
+## **Analyse hiérarchique**
+
+L'avantage de l'analyse hiérarchique avec la méthode de ward est qu'il développe un dendogramme
+basée sur l'homogénéité des groupes. Si deux groupes formée ont, entre eux, une petite homogénéité (plus petite pertes d'information) alors ils sont regroupé ensemble. Ainsi de suite jusqu'à ne former qu'un seul groupe. Il est donc facile de voir visuellement le nombre de groupe qui semble être le bon.
+
+
+### **Création du modèle**
+```{r}
+# Créer un nouveau jeux de données avec les données standardisé 
+scale_data <- cbind(data_clean[,1:4],scale(data_clean[,5:17]))
+
+#Création d'une matrice des distance pour la méthode hiérarchique.
+d <- dist(scale_data[,5:17],method = 'euclidean')
+
+#Création du modèle
+model1 <- hclust(d,method = 'ward.D2')
+
+#Visualisation du dendogramme
+plot(model1,xlab = 'Indexe des joueurs')
+
+#Création des clusters (2 groupes)
+cluster <- cutree(model1,k=2)
+
+#Ajout des groupes sur les données original pour analyse
+model1_data <- cbind(data_clean,cluster)
+
+# Analyse des deux groupes
+model1_resume <- aggregate(model1_data[,5:17], by = list(model1_data$cluster), FUN='mean')
+model1_resume
+
+# Visualisation rapide des clusters sur deux variables.
+ggplot (data = model1_data)+
+  geom_point(aes(x=Rec,y=Tgt,colour=as.factor(cluster)))+
+  theme_light()+
+  labs(title='Reception par target pour chaque cluster (Méthode Hiérarchique)',
+       y='Target',
+       x='Réception')+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+### Retour sur la méthode Hiérarchique utilisé
+
+Le dendogramme retourné ci-haut montre que 2 cluster peuvent être créé. Bien que nous pourrions en avoir 4 si le point de coupure se trouvait à la hauteur de 20, les groupes créée ne semblerons pas avoir de grande différence entre elles. 
+
+La comparaison entre les moyennes des variables propre du cluster 1 vs cluster 2 sont les suivantes.
+
+ * Ils sont les partants pour la plus part des match avec une moyenne de `r round(model1_resume[1,3],2)` vs `r round(model1_resume[2,3],2)` pour le cluster 2.
+ * Ils ont des yards per reception en moyenne de `r round(model1_resume[1,7],2)` vs `r round(model1_resume[2,7],2)` pour le deuxième cluster.
+ * Un pourcentage de _first down_ de `r round(model1_resume[1,14],2)` vs `r round(model1_resume[2,14],2)`.
+ * Toutefois, le cluster 2 semble compléter d'avantage leur réception avec une moyenne de `r round(model1_resume[2,13],2)`% vs `r round(model1_resume[1,13],2)`% pour le cluster 1.
+
+Le dernier graphique montre les receptions par target selon les clusters. On voit clairement la différence entre les deux groupes. Is semble tout de même y avoir certaines observation du cluster 2 mal identifié.
+
+
+
+### **Analyse Kmeans sur données standardisés.**
+
+L'analyse du Kmeans va tenter de reproduire et de confirmer les résultats trouver avec la méthodes hiérarchique
+
+```{r}
+# Trouver le nombre de cluster idéal
+fviz_nbclust(scale_data[,5:17],kmeans,method = 'wss')
+
+# Méthode silhouette
+fviz_nbclust(scale_data[,5:17],kmeans,method = 'silhouette')
+```
+
+Le premier graphique qui représente la somme total des distances au carré à l'intérieur des clusters semble nous indiquer un nombre idéal de cluster de deux. Cependant, on pourrait argumenter que ce graphique n'est pas très précis quant au choix à prendre.
+
+Le second graphique, choisit le nombre de cluster selon la methode 'silhouette'. Ce graphique représnte mieux le nombre optimal de cluster à choisir. Ici 2 semble être le bon choix.
+
+### Création du modèle
+
+```{r}
+# Création du modèle
+model2 <- kmeans(scale_data[,5:17],2,nstart = 100)
+
+model2$tot.withinss # Représente la mesure de performance
+
+# Création d'un tableau avec donnée originale et cluster créée.
+model2_data<- cbind(data_clean,model2$cluster)
+names(model2_data)[names(model2_data)=='model2$cluster']<- 'cluster'
+
+# Analyse rapide des clusters
+aggregate.data.frame(model2_data[,5:17],by =list(model2_data$cluster),FUN = 'mean')
+
+
+# Visualisation rapide des clusters sur deux variables.
+ggplot (data = model2_data)+
+  geom_point(aes(x=Rec,y=Tgt,colour=as.factor(cluster)))+
+  theme_light()+
+  labs(title='Reception par target pour chaque cluster (Méthode K-means)',
+       y='Target',
+       x='Réception')+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+### Retour sur la méthode K-means utilisé.
+
+Ici, les cluster sont inversé, le cluster 1 représente le cluster 2 du premier modèle et le cluster 2 représente le cluster 1 du premier modèle. On remarque que le modèles avec k-means semble faire une meilleur séparation. Les différences présentés dans le tableau d'aggrégation sont plus grande et nettes que le premier modèle. Les groupes ont essentiellement les mêmes caractérstiques. Graphiquement, on remarque une moin grande "Erreur" au niveau de l'attribution des observations à leur différent cluster. 
+
+
+## **Visualisation finale**
+
+```{r}
+# % de Premier essaie par réception pour chaque cluster.
+ggplot(data = model2_data)+
+  geom_boxplot(aes(x=as.factor(cluster),y=XD1_Rec,fill=as.factor(Pos)))+
+  facet_wrap(~as.factor(Pos))+
+  theme_light()+
+  labs(title='Premier essaie par reception pour chaque cluster et position ',
+       y='% de premier essaie atteint',
+       x='Cluster')+
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+# Graphique du nombre de yards parcourur par rapport aux réceptions
+ggplot(data = model2_data)+
+  geom_point(aes(x=Yds,y=Rec,colour=as.factor(cluster)))+
+  theme_light()+
+  labs(title='Yards total sur le nombre de réception',
+       y='Reception',
+       x='Yards total')+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+### **Visualisation 3d**
+```{r warning=FALSE}
+x= model2_data$XD1_Rec
+y=model2_data$Y.R
+z=model2_data$Yds
+
+
+p <- plot_ly(data=model2_data, x=~x, y=~y, 
+             z=~z, color=~as.factor(cluster)) %>%
+  add_markers(size=8)%>%
+  layout(scene = list(xaxis=list(title='1st down / réception'),
+                      yaxis=list(title='Yards par réception'),
+                      zaxis=list(title='Yards total'),
+                      title=list(title='Visalisation 3D')),
+         legend=list(title=list(text='<b> Cluster </b>')))
+p
+```
+
+
+<center>
+### Comparaison des équipes en finale du SuperBowl:Saison 2019 (49ers vs chiefs)
+
+![](C:/Users/marc-/Desktop/R/nfl_logo_2.png){width=50%}
+</center>
+
+Les graphiques ci-dessous vont démontrer, pour les deux équipes, le regroupement dans lequelle chacun de ces joueurs aux position WR, TE et RB ce trouve. 
+
+**RAPPEL** : Le vainceur du SuperBowl LIV était les Chiefs avec un score final de 31-20.
+
+```{r}
+#Chiefs 
+kansas <- model2_data[model2_data$Tm=='KAN',]
+
+chiefs <- ggplot(data = kansas,aes(x=XD1_Rec,y=Y.R,colour=as.factor(cluster),shape=Pos,label=Player))+
+  geom_point()+
+  geom_text(aes(label=Player,hjust=0.5,vjust=1),size=3)+
+  theme_light()+
+  labs(title = 'Kansas City Chiefs')+
+  theme(plot.title=element_text(hjust = 0.5))
+  
+chiefs
+
+
+# 49ers
+sfo<-model2_data[model2_data$Tm=='SFO',]
+
+fortynine_ers <- ggplot(data = sfo,aes(x=XD1_Rec,y=Y.R,colour=as.factor(cluster),shape=Pos,label=Player))+
+  geom_point()+
+  geom_text(aes(label=Player,hjust=0.5,vjust=1),size=3)+
+  labs(title = 'San Francisco 49ers ')+
+  theme_light()+
+  theme(plot.title=element_text(hjust = 0.5))
+  
+  
+fortynine_ers
+
+```
+
+A l'analyse des deux graphiques, ont remarque que les 49ers semble avoir une équipe plus fonctionnelle étant donné que leur joueurs ont pour la majorité un pourcentage d'attrapé suppérieur à 55% et complète en moyenne 12 verges par réception. Les chiefs ont des résultats similaire mais seulement 6 joueurs contribue davantage au succès du jeux offensifs. Il est a noter aussi que les chiefs ont 3 joueurs associés au cluster 2 qui représente les joueurs les plus performants de la saison.
+
+
